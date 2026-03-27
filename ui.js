@@ -6,6 +6,7 @@
 // ==================== 全局状态 ====================
 let selectedStat = null;
 let autoFarmTimer = null; // 自动刷怪定时器
+let autoBattleEnabled = false; // 自动战斗开关
 
 // ==================== DOM 元素 ====================
 let elements = {};
@@ -75,6 +76,11 @@ function initElements() {
         btnStartAutoFarm: document.getElementById('btnStartAutoFarm'),
         btnStopAutoFarm: document.getElementById('btnStopAutoFarm'),
         autoFarmStatus: document.getElementById('autoFarmStatus'),
+        
+        // 自动战斗
+        autoBattleToggle: document.getElementById('autoBattleToggle'),
+        autoBattleSlider: document.getElementById('autoBattleSlider'),
+        autoBattleStatus: document.getElementById('autoBattleStatus'),
     };
 }
 
@@ -82,6 +88,7 @@ function initElements() {
 function init() {
     initElements();
     initTheme();
+    initAutoBattle();
     
     // 文件导入事件绑定
     elements.importFile.addEventListener('change', onImportData);
@@ -224,10 +231,17 @@ function onStartBattle() {
         updateUI();
         addLog(`遭遇敌人：${result.enemy.name} (Lv.${result.enemy.level})${result.enemy.isBoss ? ' 【BOSS】' : ''}`, 'battle');
         
-        // 自动战斗
-        setTimeout(() => {
-            onAutoBattle();
-        }, 500);
+        // 如果自动战斗已开启，自动打完
+        if (autoBattleEnabled) {
+            setTimeout(() => {
+                const autoResult = GameAPI.makeDecision('auto_battle');
+                updateUI();
+                
+                if (autoResult.success) {
+                    addLog(`⚡ 自动战斗结束，共 ${autoResult.rounds} 回合`, 'system');
+                }
+            }, 500);
+        }
     } else if (result.reason === 'cooldown') {
         addLog('战斗冷却中，请稍后再试...', 'system');
     } else if (result.reason === 'no_player') {
@@ -244,15 +258,47 @@ function onBattleRound() {
     }
 }
 
-function onAutoBattle() {
-    // 自动刷怪模式：打完一场自动继续下一场
-    const result = GameAPI.makeDecision('auto_battle', { autoContinue: true });
-    updateUI();
+function onToggleAutoBattle() {
+    const checkbox = document.getElementById('autoBattleToggle');
+    const slider = document.getElementById('autoBattleSlider');
+    const status = document.getElementById('autoBattleStatus');
     
-    if (result.success) {
-        addLog(`自动战斗结束，共进行了 ${result.rounds} 回合`, 'system');
-    } else if (result.reason === 'no_battle') {
-        addLog('请先开始战斗！', 'system');
+    autoBattleEnabled = checkbox.checked;
+    
+    // 更新滑块样式
+    if (autoBattleEnabled) {
+        slider.style.backgroundColor = '#17a2b8';
+        slider.querySelector('span').style.transform = 'translateX(24px)';
+        status.textContent = '✅ 自动战斗已开启';
+        localStorage.setItem('textRPG_autoBattle', 'true');
+        addLog('⚡ 自动战斗已开启', 'system');
+    } else {
+        slider.style.backgroundColor = '#444';
+        slider.querySelector('span').style.transform = 'translateX(0)';
+        status.textContent = '';
+        localStorage.setItem('textRPG_autoBattle', 'false');
+        addLog('⚡ 自动战斗已关闭', 'system');
+    }
+}
+
+// 初始化自动战斗开关状态
+function initAutoBattle() {
+    const saved = localStorage.getItem('textRPG_autoBattle');
+    const checkbox = document.getElementById('autoBattleToggle');
+    const slider = document.getElementById('autoBattleSlider');
+    const status = document.getElementById('autoBattleStatus');
+    
+    if (saved === 'true') {
+        autoBattleEnabled = true;
+        checkbox.checked = true;
+        slider.style.backgroundColor = '#17a2b8';
+        slider.querySelector('span').style.transform = 'translateX(24px)';
+        status.textContent = '✅ 自动战斗已开启';
+    } else {
+        autoBattleEnabled = false;
+        checkbox.checked = false;
+        slider.style.backgroundColor = '#444';
+        slider.querySelector('span').style.transform = 'translateX(0)';
     }
 }
 

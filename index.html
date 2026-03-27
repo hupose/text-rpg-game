@@ -153,7 +153,6 @@
                 <div class="battle-actions">
                     <button id="btnStartBattle" class="btn btn-primary btn-block" onclick="onStartBattle()">🔍 寻找敌人</button>
                     <button id="btnBattleRound" class="btn btn-danger btn-block hidden" onclick="onBattleRound()">⚔️ 攻击</button>
-                    <button id="btnAutoBattle" class="btn btn-warning btn-block hidden" onclick="onAutoBattle()">⚡ 自动战斗</button>
                 </div>
             </div>
 
@@ -185,6 +184,21 @@
                         <button id="btnStopAutoFarm" class="btn btn-danger hidden" onclick="onStopAutoFarm()">⏹️ 停止刷怪</button>
                     </div>
                     <div id="autoFarmStatus" style="margin-top: 8px; font-size: 13px; color: #888;"></div>
+                </div>
+                
+                <!-- 自动战斗开关 -->
+                <div class="auto-battle-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #3a3a3a;">
+                    <h4 style="margin-bottom: 10px; color: #17a2b8;">⚡ 自动战斗</h4>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 14px; color: #aaa;">开启后每次战斗自动打完</span>
+                        <label style="position: relative; display: inline-block; width: 50px; height: 26px;">
+                            <input type="checkbox" id="autoBattleToggle" style="opacity: 0; width: 0; height: 0;" onchange="onToggleAutoBattle()">
+                            <span id="autoBattleSlider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #444; transition: .3s; border-radius: 26px;">
+                                <span style="position: absolute; content: ''; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%;"></span>
+                            </span>
+                        </label>
+                    </div>
+                    <div id="autoBattleStatus" style="margin-top: 8px; font-size: 13px; color: #888;"></div>
                 </div>
                 
                 <div class="save-status" id="saveStatus"></div>
