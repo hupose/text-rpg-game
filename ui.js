@@ -348,14 +348,6 @@ function addLog(message, type = 'system') {
     elements.battleLog.scrollTop = elements.battleLog.scrollHeight;
 }
 
-// 工具函数（和 game.js 共享）
-const Utils = {
-    formatTime(ms) {
-        const seconds = Math.ceil(ms / 1000);
-        return `${seconds}s`;
-    }
-};
-
 // ==================== 启动 ====================
 // 确保在脚本加载完成后立即执行（兼容手机浏览器）
 if (document.readyState === 'loading') {
