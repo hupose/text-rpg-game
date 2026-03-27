@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>GameAPI Test</title>
+</head>
+<body>
+    <h1>GameAPI 测试</h1>
+    <div id="output"></div>
+    
+    <script src="game.js"></script>
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(msg) {
+            output.innerHTML += `<pre>${msg}</pre>`;
+            console.log(msg);
+        }
+        
+        try {
+            log('✅ game.js 加载成功');
+            log('GameAPI 对象：' + (typeof GameAPI));
+            
+            // 测试新游戏
+            log('\n--- 测试 new_game ---');
+            const newGameResult = GameAPI.makeDecision('new_game', { name: '测试勇者', classType: 'physical' });
+            log('new_game 结果：' + JSON.stringify(newGameResult, null, 2));
+            
+            // 测试查询状态
+            log('\n--- 测试 getState ---');
+            const state = GameAPI.getState();
+            log('游戏状态：' + JSON.stringify(state, null, 2));
+            
+            // 测试加点
+            log('\n--- 测试 add_points ---');
+            const addPointsResult = GameAPI.makeDecision('add_points', { stat: 'strength', points: 2 });
+            log('add_points 结果：' + JSON.stringify(addPointsResult, null, 2));
+            
+            // 测试战斗
+            log('\n--- 测试 start_battle ---');
+            const battleResult = GameAPI.makeDecision('start_battle');
+            log('start_battle 结果：' + JSON.stringify(battleResult, null, 2));
+            
+            // 测试自动战斗
+            if (battleResult.success) {
+                log('\n--- 测试 auto_battle ---');
+                const autoResult = GameAPI.makeDecision('auto_battle');
+                log('auto_battle 结果：' + JSON.stringify(autoResult, null, 2));
+            }
+            
+            // 测试保存
+            log('\n--- 测试 save ---');
+            const saveResult = GameAPI.makeDecision('save');
+            log('save 结果：' + JSON.stringify(saveResult, null, 2));
+            
+            log('\n✅ 所有测试完成！');
+            
+        } catch (e) {
+            log('❌ 错误：' + e.message);
+            log('堆栈：' + e.stack);
+        }
+    </script>
+</body>
+</html>

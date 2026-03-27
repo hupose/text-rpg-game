@@ -1,0 +1,758 @@
+/**
+ * Text RPG - Core Game Logic
+ * 纯文字放置 RPG 游戏核心
+ * 
+ * OpenClaw 集成接口：
+ * - GameAPI.getState() - 查询游戏状态
+ * - GameAPI.makeDecision(action, params) - 执行决策（加点、战斗等）
+ */
+
+// ==================== 游戏配置 ====================
+const CONFIG = {
+    // 战斗冷却时间（秒）
+    BATTLE_COOLDOWN_MIN: 5,
+    BATTLE_COOLDOWN_MAX: 10,
+    
+    // 升级所需经验公式：base * level^exponent
+    EXP_BASE: 100,
+    EXP_EXPONENT: 1.5,
+    
+    // 每级属性点
+    POINTS_PER_LEVEL: 3,
+    
+    // 职业加成配置
+    CLASS_BONUSES: {
+        physical: {
+            name: "物理",
+            bonuses: {
+                strength: 1.2,  // 力量加成 20%
+                magic: 0.8,     // 魔法惩罚 20%
+                stamina: 1.1,   // 体力加成 10%
+            }
+        },
+        magical: {
+            name: "魔法",
+            bonuses: {
+                strength: 0.8,
+                magic: 1.2,
+                stamina: 1.0,
+            }
+        }
+    },
+    
+    // 属性阈值加成（达到后额外加成）
+    ATTRIBUTE_THRESHOLDS: {
+        strength: [10, 20, 30, 50, 100],
+        magic: [10, 20, 30, 50, 100],
+        stamina: [10, 20, 30, 50, 100],
+        defense: [10, 20, 30, 50, 100],
+    },
+    
+    // 存档键名
+    SAVE_KEY: 'textRPG_save_v1',
+    
+    // 状态文件路径（OpenClaw 可读取）
+    STATE_FILE: 'game_state.json'
+};
+
+// ==================== 工具函数 ====================
+const Utils = {
+    random(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    },
+    
+    clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+    },
+    
+    now() {
+        return Date.now();
+    },
+    
+    formatTime(ms) {
+        const seconds = Math.floor(ms / 1000);
+        return `${seconds}s`;
+    }
+};
+
+// ==================== 角色系统 ====================
+class Character {
+    constructor(name, classType) {
+        this.name = name;
+        this.classType = classType; // 'physical' or 'magical'
+        this.level = 1;
+        this.exp = 0;
+        this.expToNext = this.calcExpToNext(1);
+        this.unusedPoints = 0;
+        
+        // 基础属性（不含加成）
+        this.baseStats = {
+            strength: 5,
+            magic: 5,
+            stamina: 10,
+            defense: 5,
+        };
+        
+        // 战斗状态
+        this.currentHp = this.getMaxHp();
+        this.hpRegen = this.getHpRegen();
+    }
+    
+    getClassBonus(statName) {
+        const classConfig = CONFIG.CLASS_BONUSES[this.classType];
+        return classConfig.bonuses[statName] || 1.0;
+    }
+    
+    getThresholdBonus(statName, value) {
+        const thresholds = CONFIG.ATTRIBUTE_THRESHOLDS[statName];
+        if (!thresholds) return 0;
+        
+        let bonus = 0;
+        for (const threshold of thresholds) {
+            if (value >= threshold) {
+                bonus += 2; // 每个阈值 +2 点
+            }
+        }
+        return bonus;
+    }
+    
+    getStat(statName) {
+        const base = this.baseStats[statName] || 0;
+        const classBonus = this.getClassBonus(statName);
+        const thresholdBonus = this.getThresholdBonus(statName, base);
+        
+        return Math.floor(base * classBonus + thresholdBonus);
+    }
+    
+    getStrength() { return this.getStat('strength'); }
+    getMagic() { return this.getStat('magic'); }
+    getStamina() { return this.getStat('stamina'); }
+    getDefense() { return this.getStat('defense'); }
+    
+    getMaxHp() {
+        return 100 + this.getStamina() * 10;
+    }
+    
+    getHpRegen() {
+        return 1 + Math.floor(this.getStamina() * 0.5);
+    }
+    
+    getAttackPower() {
+        // 物理职业：力量主导；魔法职业：魔法主导
+        if (this.classType === 'physical') {
+            return this.getStrength() * 2 + this.getMagic();
+        } else {
+            return this.getMagic() * 2 + this.getStrength();
+        }
+    }
+    
+    addPoints(statName, points) {
+        if (points > this.unusedPoints || points < 0) return false;
+        if (!this.baseStats.hasOwnProperty(statName)) return false;
+        
+        this.baseStats[statName] += points;
+        this.unusedPoints -= points;
+        
+        // 重新计算当前血量（升级后最大血量变化）
+        const newMaxHp = this.getMaxHp();
+        if (this.currentHp > newMaxHp) {
+            this.currentHp = newMaxHp;
+        }
+        
+        return true;
+    }
+    
+    gainExp(amount) {
+        this.exp += amount;
+        let leveledUp = false;
+        
+        while (this.exp >= this.expToNext) {
+            this.levelUp();
+            leveledUp = true;
+        }
+        
+        return leveledUp;
+    }
+    
+    levelUp() {
+        this.exp -= this.expToNext;
+        this.level++;
+        this.expToNext = this.calcExpToNext(this.level);
+        this.unusedPoints += CONFIG.POINTS_PER_LEVEL;
+        
+        // 回满血
+        this.currentHp = this.getMaxHp();
+        
+        return this.level;
+    }
+    
+    calcExpToNext(level) {
+        return Math.floor(CONFIG.EXP_BASE * Math.pow(level, CONFIG.EXP_EXPONENT));
+    }
+    
+    regenHp(amount) {
+        const oldHp = this.currentHp;
+        this.currentHp = Math.min(this.currentHp + amount, this.getMaxHp());
+        return this.currentHp - oldHp;
+    }
+    
+    takeDamage(amount) {
+        // 防御减免
+        const defense = this.getDefense();
+        const actualDamage = Math.max(1, amount - defense);
+        
+        this.currentHp -= actualDamage;
+        return actualDamage;
+    }
+    
+    isAlive() {
+        return this.currentHp > 0;
+    }
+    
+    heal() {
+        this.currentHp = this.getMaxHp();
+    }
+    
+    // 导出为纯 JSON 对象
+    toJSON() {
+        return {
+            name: this.name,
+            classType: this.classType,
+            level: this.level,
+            exp: this.exp,
+            expToNext: this.expToNext,
+            unusedPoints: this.unusedPoints,
+            baseStats: { ...this.baseStats },
+            currentHp: this.currentHp,
+            maxHp: this.getMaxHp(),
+            hpRegen: this.getHpRegen(),
+            // 计算属性（只读）
+            strength: this.getStrength(),
+            magic: this.getMagic(),
+            stamina: this.getStamina(),
+            defense: this.getDefense(),
+            attackPower: this.getAttackPower(),
+        };
+    }
+    
+    // 从 JSON 对象加载
+    static fromJSON(data) {
+        const char = new Character(data.name, data.classType);
+        char.level = data.level;
+        char.exp = data.exp;
+        char.expToNext = data.expToNext;
+        char.unusedPoints = data.unusedPoints;
+        char.baseStats = { ...data.baseStats };
+        char.currentHp = data.currentHp;
+        return char;
+    }
+}
+
+// ==================== 敌人系统 ====================
+class Enemy {
+    constructor(playerLevel) {
+        this.isBoss = Math.random() < 0.1; // 10% 概率遇到 BOSS
+        this.level = this.isBoss 
+            ? Math.max(1, playerLevel + Utils.random(0, 2))
+            : Math.max(1, playerLevel + Utils.random(-1, 1));
+        
+        this.classType = Math.random() < 0.5 ? 'physical' : 'magical';
+        this.name = this.generateName();
+        
+        // 敌人属性（比玩家稍弱）
+        const multiplier = this.isBoss ? 1.5 : 0.9;
+        this.baseStats = {
+            strength: Math.floor((5 + this.level * 2) * multiplier),
+            magic: Math.floor((5 + this.level * 2) * multiplier),
+            stamina: Math.floor((10 + this.level * 3) * multiplier),
+            defense: Math.floor((5 + this.level * 1.5) * multiplier),
+        };
+        
+        this.maxHp = this.calcMaxHp();
+        this.currentHp = this.maxHp;
+    }
+    
+    generateName() {
+        const prefixes = this.isBoss ? ['魔王', '远古', '黑暗', '深渊', '终极'] : ['小', '普通', '野生', '流浪', '疯狂'];
+        const suffixes = this.classType === 'physical' 
+            ? ['战士', '剑士', '狂战', '武者', '佣兵']
+            : ['法师', '术士', '巫师', '元素使', '祭司'];
+        
+        return prefixes[Utils.random(0, prefixes.length - 1)] + 
+               suffixes[Utils.random(0, suffixes.length - 1)];
+    }
+    
+    getStat(statName) {
+        return this.baseStats[statName] || 0;
+    }
+    
+    calcMaxHp() {
+        return 100 + this.getStat('stamina') * 10;
+    }
+    
+    getAttackPower() {
+        if (this.classType === 'physical') {
+            return this.getStat('strength') * 2 + this.getStat('magic');
+        } else {
+            return this.getStat('magic') * 2 + this.getStat('strength');
+        }
+    }
+    
+    takeDamage(amount) {
+        const defense = this.getStat('defense');
+        const actualDamage = Math.max(1, amount - defense);
+        this.currentHp -= actualDamage;
+        return actualDamage;
+    }
+    
+    isAlive() {
+        return this.currentHp > 0;
+    }
+    
+    toJSON() {
+        return {
+            name: this.name,
+            isBoss: this.isBoss,
+            level: this.level,
+            classType: this.classType,
+            currentHp: this.currentHp,
+            maxHp: this.maxHp,
+            attackPower: this.getAttackPower(),
+            defense: this.getStat('defense'),
+        };
+    }
+}
+
+// ==================== 战斗系统 ====================
+class BattleSystem {
+    constructor(game) {
+        this.game = game;
+        this.inBattle = false;
+        this.currentEnemy = null;
+        this.battleLog = [];
+        this.lastBattleTime = 0;
+        this.battleCount = 0;
+        this.winCount = 0;
+        this.loseCount = 0;
+    }
+    
+    canStartBattle() {
+        if (this.inBattle) return false;
+        if (!this.game.player.isAlive()) return false;
+        
+        const cooldownMs = (this.lastBattleTime === 0) ? 0 : 
+            (CONFIG.BATTLE_COOLDOWN_MIN * 1000);
+        return Utils.now() - this.lastBattleTime >= cooldownMs;
+    }
+    
+    getCooldownRemaining() {
+        if (this.inBattle) return 0;
+        const elapsed = Utils.now() - this.lastBattleTime;
+        const minCooldown = CONFIG.BATTLE_COOLDOWN_MIN * 1000;
+        return Math.max(0, minCooldown - elapsed);
+    }
+    
+    startBattle() {
+        if (!this.canStartBattle()) {
+            return { success: false, reason: 'cooldown' };
+        }
+        
+        this.inBattle = true;
+        this.currentEnemy = new Enemy(this.game.player.level);
+        this.battleLog = [];
+        this.lastBattleTime = Utils.now();
+        this.battleCount++;
+        
+        this.log(`⚔️ 遭遇敌人：${this.currentEnemy.name} (Lv.${this.currentEnemy.level}) ${this.currentEnemy.isBoss ? '【BOSS】' : ''}`);
+        
+        return { success: true, enemy: this.currentEnemy.toJSON() };
+    }
+    
+    log(message) {
+        this.battleLog.push({
+            time: Utils.now(),
+            message: message
+        });
+        // 通知 UI 更新
+        if (this.game.onBattleLog) {
+            this.game.onBattleLog(message);
+        }
+    }
+    
+    // 执行一轮攻击
+    attack(attacker, defender, isPlayer) {
+        const attackPower = attacker.getAttackPower ? attacker.getAttackPower() : attacker.attackPower;
+        const damage = defender.takeDamage(attackPower);
+        
+        const attackerName = isPlayer ? '你' : attacker.name;
+        const defenderName = isPlayer ? defender.name : '你';
+        
+        this.log(`${attackerName} 攻击 ${defenderName}，造成 ${damage} 点伤害（${defenderName} HP: ${defender.currentHp}/${defender.maxHp || defender.currentHp}）`);
+        
+        return damage;
+    }
+    
+    // 执行一次战斗回合（玩家攻击 + 敌人反击）
+    battleRound() {
+        if (!this.inBattle || !this.currentEnemy) {
+            return { success: false, reason: 'no_battle' };
+        }
+        
+        const player = this.game.player;
+        const enemy = this.currentEnemy;
+        
+        // 玩家先手
+        this.attack(player, enemy, true);
+        
+        if (!enemy.isAlive()) {
+            this.endBattle(true);
+            return { success: true, result: 'win' };
+        }
+        
+        // 敌人反击
+        this.attack(enemy, player, false);
+        
+        if (!player.isAlive()) {
+            this.endBattle(false);
+            return { success: true, result: 'lose' };
+        }
+        
+        return { success: true, result: 'ongoing' };
+    }
+    
+    // 自动战斗直到结束
+    autoBattle() {
+        if (!this.inBattle) {
+            return { success: false, reason: 'no_battle' };
+        }
+        
+        const rounds = [];
+        let maxRounds = 100; // 防止死循环
+        
+        while (this.inBattle && maxRounds > 0) {
+            const result = this.battleRound();
+            rounds.push(result);
+            maxRounds--;
+            
+            // 添加回血效果
+            if (this.inBattle) {
+                const regen = this.game.player.regenHp(this.game.player.hpRegen);
+                if (regen > 0) {
+                    this.log(`💚 你恢复了 ${regen} 点生命值`);
+                }
+            }
+        }
+        
+        return { success: true, rounds: rounds.length };
+    }
+    
+    endBattle(playerWin) {
+        this.inBattle = false;
+        
+        if (playerWin) {
+            this.winCount++;
+            const expReward = this.currentEnemy.isBoss ? 
+                Math.floor(this.currentEnemy.level * 50) : 
+                Math.floor(this.currentEnemy.level * 20);
+            
+            this.log(`🎉 战斗胜利！获得 ${expReward} 点经验值`);
+            this.game.player.gainExp(expReward);
+            
+            // 通知 UI
+            if (this.game.onBattleEnd) {
+                this.game.onBattleEnd('win', expReward);
+            }
+        } else {
+            this.loseCount++;
+            this.log(`💀 战斗失败！你被击败了...`);
+            this.game.player.heal(); // 复活并回满血
+            
+            if (this.game.onBattleEnd) {
+                this.game.onBattleEnd('lose', 0);
+            }
+        }
+        
+        const enemy = this.currentEnemy;
+        this.currentEnemy = null;
+        
+        return {
+            win: playerWin,
+            expGained: playerWin ? Math.floor(enemy.level * (enemy.isBoss ? 50 : 20)) : 0,
+            enemy: enemy.toJSON()
+        };
+    }
+    
+    getStats() {
+        return {
+            inBattle: this.inBattle,
+            battleCount: this.battleCount,
+            winCount: this.winCount,
+            loseCount: this.loseCount,
+            winRate: this.battleCount > 0 ? 
+                Math.round((this.winCount / this.battleCount) * 100) : 0,
+            cooldownRemaining: this.getCooldownRemaining(),
+        };
+    }
+    
+    toJSON() {
+        return {
+            ...this.getStats(),
+            currentEnemy: this.currentEnemy ? this.currentEnemy.toJSON() : null,
+            recentLogs: this.battleLog.slice(-10).map(l => l.message)
+        };
+    }
+}
+
+// ==================== 游戏主类 ====================
+class Game {
+    constructor() {
+        this.player = null;
+        this.battleSystem = new BattleSystem(this);
+        this.gameStartTime = null;
+        this.lastSaveTime = null;
+        this.totalPlayTime = 0;
+        
+        // UI 回调
+        this.onBattleLog = null;
+        this.onBattleEnd = null;
+        this.onStateChange = null;
+    }
+    
+    // 初始化新游戏
+    newGame(playerName, classType) {
+        if (!['physical', 'magical'].includes(classType)) {
+            throw new Error('Invalid class type. Choose "physical" or "magical"');
+        }
+        
+        this.player = new Character(playerName, classType);
+        this.gameStartTime = Utils.now();
+        this.lastSaveTime = Utils.now();
+        this.totalPlayTime = 0;
+        
+        this.notifyStateChange();
+        
+        return {
+            success: true,
+            message: `欢迎来到文字 RPG！你选择了${CONFIG.CLASS_BONUSES[classType].name}职业。`,
+            player: this.player.toJSON()
+        };
+    }
+    
+    // 加点
+    addPoints(statName, points) {
+        if (!this.player) {
+            return { success: false, reason: 'no_player' };
+        }
+        
+        if (this.player.unusedPoints < points) {
+            return { 
+                success: false, 
+                reason: 'not_enough_points',
+                available: this.player.unusedPoints,
+                requested: points
+            };
+        }
+        
+        const success = this.player.addPoints(statName, points);
+        if (success) {
+            this.notifyStateChange();
+            return {
+                success: true,
+                message: `${statName} +${points}`,
+                player: this.player.toJSON()
+            };
+        }
+        
+        return { success: false, reason: 'invalid_stat' };
+    }
+    
+    // 开始战斗
+    startBattle() {
+        return this.battleSystem.startBattle();
+    }
+    
+    // 战斗回合
+    battleRound() {
+        return this.battleSystem.battleRound();
+    }
+    
+    // 自动战斗
+    autoBattle() {
+        return this.battleSystem.autoBattle();
+    }
+    
+    // 保存游戏
+    save() {
+        if (this.battleSystem.inBattle) {
+            return { success: false, reason: 'in_battle' };
+        }
+        
+        try {
+            const saveData = this.exportState();
+            localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(saveData));
+            this.lastSaveTime = Utils.now();
+            
+            // 同时写入文件（OpenClaw 可读取）
+            this.writeStateFile(saveData);
+            
+            return { success: true, message: '游戏已保存' };
+        } catch (e) {
+            return { success: false, reason: 'save_error', error: e.message };
+        }
+    }
+    
+    // 加载游戏
+    load() {
+        try {
+            const saveData = localStorage.getItem(CONFIG.SAVE_KEY);
+            if (!saveData) {
+                return { success: false, reason: 'no_save' };
+            }
+            
+            this.importState(JSON.parse(saveData));
+            return { success: true, message: '游戏已加载', player: this.player.toJSON() };
+        } catch (e) {
+            return { success: false, reason: 'load_error', error: e.message };
+        }
+    }
+    
+    // 导出游戏状态（用于存档和 OpenClaw 读取）
+    exportState() {
+        return {
+            version: 1,
+            timestamp: Utils.now(),
+            player: this.player ? this.player.toJSON() : null,
+            battleSystem: this.battleSystem.toJSON(),
+            gameStartTime: this.gameStartTime,
+            lastSaveTime: this.lastSaveTime,
+            totalPlayTime: this.totalPlayTime + (this.gameStartTime ? Utils.now() - this.gameStartTime : 0)
+        };
+    }
+    
+    // 导入游戏状态
+    importState(data) {
+        this.gameStartTime = data.gameStartTime;
+        this.lastSaveTime = data.lastSaveTime;
+        this.totalPlayTime = data.totalPlayTime || 0;
+        
+        if (data.player) {
+            this.player = Character.fromJSON(data.player);
+        }
+        
+        if (data.battleSystem) {
+            this.battleSystem.battleCount = data.battleSystem.battleCount || 0;
+            this.battleSystem.winCount = data.battleSystem.winCount || 0;
+            this.battleSystem.loseCount = data.battleSystem.loseCount || 0;
+        }
+        
+        this.notifyStateChange();
+    }
+    
+    // 写入状态文件（OpenClaw 可读）
+    writeStateFile(state) {
+        // 在浏览器环境中，这可以通过下载或 IndexedDB 实现
+        // 在 Node.js 环境中，可以直接写文件
+        console.log('[Game] State file updated:', state);
+        
+        // 触发回调通知 OpenClaw
+        if (window && window.dispatchEvent) {
+            window.dispatchEvent(new CustomEvent('game-state-update', { detail: state }));
+        }
+    }
+    
+    // 获取完整状态（OpenClaw 查询接口）
+    getState() {
+        return {
+            player: this.player ? this.player.toJSON() : null,
+            battle: this.battleSystem.toJSON(),
+            gameInfo: {
+                startTime: this.gameStartTime,
+                lastSaveTime: this.lastSaveTime,
+                totalPlayTime: this.totalPlayTime,
+                canSave: !this.battleSystem.inBattle
+            }
+        };
+    }
+    
+    notifyStateChange() {
+        if (this.onStateChange) {
+            this.onStateChange(this.getState());
+        }
+    }
+}
+
+// ==================== OpenClaw API 接口 ====================
+// 这是 OpenClaw 可以调用的外部接口
+const GameAPI = {
+    _game: null,
+    
+    // 获取游戏实例
+    getGame() {
+        if (!this._game) {
+            this._game = new Game();
+        }
+        return this._game;
+    },
+    
+    // 查询游戏状态
+    getState() {
+        const game = this.getGame();
+        return game.getState();
+    },
+    
+    // 执行决策（加点、战斗等）
+    makeDecision(action, params) {
+        const game = this.getGame();
+        
+        switch (action) {
+            case 'new_game':
+                return game.newGame(params.name || '勇者', params.classType || 'physical');
+            
+            case 'add_points':
+                return game.addPoints(params.stat, params.points || 1);
+            
+            case 'start_battle':
+                return game.startBattle();
+            
+            case 'battle_round':
+                return game.battleRound();
+            
+            case 'auto_battle':
+                return game.autoBattle();
+            
+            case 'save':
+                return game.save();
+            
+            case 'load':
+                return game.load();
+            
+            default:
+                return { success: false, reason: 'unknown_action', action };
+        }
+    },
+    
+    // 重置游戏
+    reset() {
+        this._game = new Game();
+        return { success: true, message: '游戏已重置' };
+    }
+};
+
+// ==================== 导出 ====================
+if (typeof module !== 'undefined' && module.exports) {
+    // Node.js 环境
+    module.exports = {
+        CONFIG,
+        Utils,
+        Character,
+        Enemy,
+        BattleSystem,
+        Game,
+        GameAPI
+    };
+} else {
+    // 浏览器环境
+    window.GameAPI = GameAPI;
+    window.Game = Game;
+    window.CONFIG = CONFIG;
+}
