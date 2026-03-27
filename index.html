@@ -171,6 +171,19 @@
                     <button id="btnImport" class="btn btn-secondary" onclick="document.getElementById('importFile').click()">📥 导入数据</button>
                     <button id="btnReset" class="btn btn-danger" onclick="onResetGame()">🔄 重置游戏</button>
                 </div>
+                
+                <!-- 自动刷怪 -->
+                <div class="auto-farm-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #3a3a3a;">
+                    <h4 style="margin-bottom: 10px; color: #f0ad4e;">🔄 自动刷怪</h4>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <label style="font-size: 14px;">间隔时间（秒）：</label>
+                        <input type="number" id="autoFarmInterval" value="10" min="5" max="60" style="width: 70px; padding: 5px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
+                        <button id="btnStartAutoFarm" class="btn btn-warning" onclick="onStartAutoFarm()">▶️ 开始刷怪</button>
+                        <button id="btnStopAutoFarm" class="btn btn-danger hidden" onclick="onStopAutoFarm()">⏹️ 停止刷怪</button>
+                    </div>
+                    <div id="autoFarmStatus" style="margin-top: 8px; font-size: 13px; color: #888;"></div>
+                </div>
+                
                 <div class="save-status" id="saveStatus"></div>
             </div>
         </div>

@@ -5,6 +5,7 @@
 
 // ==================== 全局状态 ====================
 let selectedStat = null;
+let autoFarmTimer = null; // 自动刷怪定时器
 
 // ==================== DOM 元素 ====================
 let elements = {};
@@ -68,6 +69,12 @@ function initElements() {
         importFile: document.getElementById('importFile'),
         btnReset: document.getElementById('btnReset'),
         saveStatus: document.getElementById('saveStatus'),
+        
+        // 自动刷怪
+        autoFarmInterval: document.getElementById('autoFarmInterval'),
+        btnStartAutoFarm: document.getElementById('btnStartAutoFarm'),
+        btnStopAutoFarm: document.getElementById('btnStopAutoFarm'),
+        autoFarmStatus: document.getElementById('autoFarmStatus'),
     };
 }
 
@@ -213,6 +220,91 @@ function onAutoBattle() {
         addLog(`自动战斗结束，共进行了 ${result.rounds} 回合`, 'system');
     } else if (result.reason === 'no_battle') {
         addLog('请先开始战斗！', 'system');
+    }
+}
+
+// ==================== 自动刷怪 ====================
+function onStartAutoFarm() {
+    const intervalInput = document.getElementById('autoFarmInterval');
+    const interval = parseInt(intervalInput.value) || 10;
+    
+    if (interval < 5) {
+        alert('间隔时间不能少于 5 秒！');
+        return;
+    }
+    
+    // 切换按钮状态
+    document.getElementById('btnStartAutoFarm').classList.add('hidden');
+    document.getElementById('btnStopAutoFarm').classList.remove('hidden');
+    intervalInput.disabled = true;
+    
+    // 立即执行一次
+    runAutoFarmCycle();
+    
+    // 设置定时器
+    autoFarmTimer = setInterval(runAutoFarmCycle, interval * 1000);
+    
+    updateAutoFarmStatus(`🔄 刷怪中… 每 ${interval} 秒一场`);
+    addLog(`🔄 自动刷怪已启动（间隔 ${interval} 秒）`, 'system');
+}
+
+function onStopAutoFarm() {
+    if (autoFarmTimer) {
+        clearInterval(autoFarmTimer);
+        autoFarmTimer = null;
+    }
+    
+    // 恢复按钮状态
+    document.getElementById('btnStartAutoFarm').classList.remove('hidden');
+    document.getElementById('btnStopAutoFarm').classList.add('hidden');
+    document.getElementById('autoFarmInterval').disabled = false;
+    
+    updateAutoFarmStatus('');
+    addLog('⏹️ 自动刷怪已停止', 'system');
+}
+
+function runAutoFarmCycle() {
+    const state = GameAPI.getState();
+    
+    // 检查是否可以先开始战斗
+    if (state.battle.cooldownRemaining > 0) {
+        updateAutoFarmStatus(`⏳ 冷却中… ${Math.ceil(state.battle.cooldownRemaining / 1000)}s`);
+        return;
+    }
+    
+    // 开始战斗
+    const battleResult = GameAPI.makeDecision('start_battle');
+    if (!battleResult.success) {
+        if (battleResult.reason === 'no_player') {
+            onStopAutoFarm();
+            addLog('❌ 请先开始新游戏！', 'error');
+            alert('自动刷怪已停止：需要先开始新游戏');
+        }
+        return;
+    }
+    
+    updateAutoFarmStatus(`⚔️ 战斗中：${battleResult.enemy.name}`);
+    
+    // 自动打完这场
+    setTimeout(() => {
+        const autoResult = GameAPI.makeDecision('auto_battle');
+        updateUI();
+        
+        if (autoResult.success) {
+            updateAutoFarmStatus(`✅ 胜利！共 ${autoResult.rounds} 回合`);
+            addLog(`📊 刷怪进度：+${autoResult.rounds} 回合战斗`, 'system');
+        } else {
+            updateAutoFarmStatus(`❌ 战斗失败`);
+            addLog('❌ 战斗失败，自动刷怪已停止', 'error');
+            onStopAutoFarm();
+        }
+    }, 500);
+}
+
+function updateAutoFarmStatus(message) {
+    const statusEl = document.getElementById('autoFarmStatus');
+    if (statusEl) {
+        statusEl.textContent = message;
     }
 }
 
