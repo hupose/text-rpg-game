@@ -89,6 +89,12 @@ function init() {
     initTheme();
     initAutoBattle();
     
+    // 设置战斗日志回调
+    const game = GameAPI.getGame();
+    game.onBattleLog = (message) => {
+        addLog(message, 'battle');
+    };
+    
     // 文件导入事件绑定
     elements.importFile.addEventListener('change', onImportData);
     
@@ -224,6 +230,8 @@ function onCancelAddPoints() {
 
 // ==================== 战斗系统 ====================
 function onStartBattle() {
+    console.log('[Battle] Start battle, autoBattleEnabled =', autoBattleEnabled);
+    
     const result = GameAPI.makeDecision('start_battle');
     
     if (result.success) {
@@ -232,14 +240,19 @@ function onStartBattle() {
         
         // 如果自动战斗已开启，自动打完
         if (autoBattleEnabled) {
+            console.log('[Battle] Auto battle enabled, will auto fight');
             setTimeout(() => {
+                console.log('[Battle] Executing auto_battle');
                 const autoResult = GameAPI.makeDecision('auto_battle');
                 updateUI();
                 
                 if (autoResult.success) {
                     addLog(`⚡ 自动战斗结束，共 ${autoResult.rounds} 回合`, 'system');
                 }
+                console.log('[Battle] Auto battle result:', autoResult);
             }, 500);
+        } else {
+            console.log('[Battle] Auto battle disabled, manual mode');
         }
     } else if (result.reason === 'cooldown') {
         addLog('战斗冷却中，请稍后再试...', 'system');
@@ -262,9 +275,16 @@ function onToggleAutoBattle() {
     const slider = document.getElementById('autoBattleSlider');
     const status = document.getElementById('autoBattleStatus');
     
+    if (!checkbox || !slider || !status) {
+        console.error('[AutoBattle] Elements not found!');
+        return;
+    }
+    
     // 手动切换 checkbox 状态
     checkbox.checked = !checkbox.checked;
     autoBattleEnabled = checkbox.checked;
+    
+    console.log('[AutoBattle] Toggled, autoBattleEnabled =', autoBattleEnabled);
     
     // 更新滑块样式
     if (autoBattleEnabled) {
@@ -289,6 +309,11 @@ function initAutoBattle() {
     const slider = document.getElementById('autoBattleSlider');
     const status = document.getElementById('autoBattleStatus');
     
+    if (!checkbox || !slider || !status) {
+        console.warn('[AutoBattle] Elements not ready yet, will retry');
+        return;
+    }
+    
     if (saved === 'true') {
         autoBattleEnabled = true;
         checkbox.checked = true;
@@ -301,6 +326,8 @@ function initAutoBattle() {
         slider.style.backgroundColor = '#444';
         slider.querySelector('span').style.transform = 'translateX(0)';
     }
+    
+    console.log('[AutoBattle] Initialized, autoBattleEnabled =', autoBattleEnabled);
 }
 
 // ==================== 自动刷怪 ====================
