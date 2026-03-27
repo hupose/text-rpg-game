@@ -50,7 +50,6 @@ function initElements() {
         // 战斗
         btnStartBattle: document.getElementById('btnStartBattle'),
         btnBattleRound: document.getElementById('btnBattleRound'),
-        btnAutoBattle: document.getElementById('btnAutoBattle'),
         cooldownTimer: document.getElementById('cooldownTimer'),
         totalBattles: document.getElementById('totalBattles'),
         winRate: document.getElementById('winRate'),
@@ -493,7 +492,6 @@ function updateUI() {
     if (battle.inBattle && battle.currentEnemy) {
         elements.enemyInfo.classList.remove('hidden');
         elements.btnBattleRound.classList.remove('hidden');
-        elements.btnAutoBattle.classList.remove('hidden');
         elements.btnStartBattle.classList.add('hidden');
         
         elements.enemyName.textContent = `${battle.currentEnemy.name} ${battle.currentEnemy.isBoss ? '【BOSS】' : ''}`;
@@ -505,7 +503,6 @@ function updateUI() {
     } else {
         elements.enemyInfo.classList.add('hidden');
         elements.btnBattleRound.classList.add('hidden');
-        elements.btnAutoBattle.classList.add('hidden');
         elements.btnStartBattle.classList.remove('hidden');
     }
     
