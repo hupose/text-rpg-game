@@ -262,6 +262,8 @@ function onToggleAutoBattle() {
     const slider = document.getElementById('autoBattleSlider');
     const status = document.getElementById('autoBattleStatus');
     
+    // 手动切换 checkbox 状态
+    checkbox.checked = !checkbox.checked;
     autoBattleEnabled = checkbox.checked;
     
     // 更新滑块样式
