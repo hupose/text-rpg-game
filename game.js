@@ -727,7 +727,7 @@ const GameAPI = {
                 return game.battleRound();
             
             case 'auto_battle':
-                return game.autoBattle(params.autoContinue || false);
+                return game.autoBattle((params && params.autoContinue) || false);
             
             case 'save':
                 return game.save();
