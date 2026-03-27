@@ -7,68 +7,74 @@
 let selectedStat = null;
 
 // ==================== DOM 元素 ====================
-const elements = {
-    // 屏幕
-    newGameScreen: document.getElementById('newGameScreen'),
-    gameScreen: document.getElementById('gameScreen'),
-    
-    // 新游戏
-    playerName: document.getElementById('playerName'),
-    btnNewGame: document.getElementById('btnNewGame'),
-    btnLoadGame: document.getElementById('btnLoadGame'),
-    
-    // 角色信息
-    playerNameDisplay: document.getElementById('playerNameDisplay'),
-    playerClass: document.getElementById('playerClass'),
-    playerLevel: document.getElementById('playerLevel'),
-    playerExp: document.getElementById('playerExp'),
-    playerExpNext: document.getElementById('playerExpNext'),
-    expBar: document.getElementById('expBar'),
-    
-    // 属性
-    statStrength: document.getElementById('statStrength'),
-    statMagic: document.getElementById('statMagic'),
-    statStamina: document.getElementById('statStamina'),
-    statDefense: document.getElementById('statDefense'),
-    statHp: document.getElementById('statHp'),
-    statRegen: document.getElementById('statRegen'),
-    statAttack: document.getElementById('statAttack'),
-    unusedPoints: document.getElementById('unusedPoints'),
-    
-    // 加点
-    addPointButtons: document.querySelectorAll('.btn-add-point'),
-    addPointsActions: document.getElementById('addPointsActions'),
-    addPointsInput: document.getElementById('addPointsInput'),
-    btnConfirmAdd: document.getElementById('btnConfirmAdd'),
-    btnCancelAdd: document.getElementById('btnCancelAdd'),
-    
-    // 战斗
-    btnStartBattle: document.getElementById('btnStartBattle'),
-    btnBattleRound: document.getElementById('btnBattleRound'),
-    btnAutoBattle: document.getElementById('btnAutoBattle'),
-    cooldownTimer: document.getElementById('cooldownTimer'),
-    totalBattles: document.getElementById('totalBattles'),
-    winRate: document.getElementById('winRate'),
-    enemyInfo: document.getElementById('enemyInfo'),
-    enemyName: document.getElementById('enemyName'),
-    enemyLevel: document.getElementById('enemyLevel'),
-    enemyHp: document.getElementById('enemyHp'),
-    enemyHpBar: document.getElementById('enemyHpBar'),
-    
-    // 日志
-    battleLog: document.getElementById('battleLog'),
-    
-    // 系统
-    btnSave: document.getElementById('btnSave'),
-    btnExport: document.getElementById('btnExport'),
-    btnImport: document.getElementById('btnImport'),
-    importFile: document.getElementById('importFile'),
-    btnReset: document.getElementById('btnReset'),
-    saveStatus: document.getElementById('saveStatus'),
-};
+let elements = {};
+
+function initElements() {
+    elements = {
+        // 屏幕
+        newGameScreen: document.getElementById('newGameScreen'),
+        gameScreen: document.getElementById('gameScreen'),
+        
+        // 新游戏
+        playerName: document.getElementById('playerName'),
+        btnNewGame: document.getElementById('btnNewGame'),
+        btnLoadGame: document.getElementById('btnLoadGame'),
+        
+        // 角色信息
+        playerNameDisplay: document.getElementById('playerNameDisplay'),
+        playerClass: document.getElementById('playerClass'),
+        playerLevel: document.getElementById('playerLevel'),
+        playerExp: document.getElementById('playerExp'),
+        playerExpNext: document.getElementById('playerExpNext'),
+        expBar: document.getElementById('expBar'),
+        
+        // 属性
+        statStrength: document.getElementById('statStrength'),
+        statMagic: document.getElementById('statMagic'),
+        statStamina: document.getElementById('statStamina'),
+        statDefense: document.getElementById('statDefense'),
+        statHp: document.getElementById('statHp'),
+        statRegen: document.getElementById('statRegen'),
+        statAttack: document.getElementById('statAttack'),
+        unusedPoints: document.getElementById('unusedPoints'),
+        
+        // 加点
+        addPointButtons: document.querySelectorAll('.btn-add-point'),
+        addPointsActions: document.getElementById('addPointsActions'),
+        addPointsInput: document.getElementById('addPointsInput'),
+        btnConfirmAdd: document.getElementById('btnConfirmAdd'),
+        btnCancelAdd: document.getElementById('btnCancelAdd'),
+        
+        // 战斗
+        btnStartBattle: document.getElementById('btnStartBattle'),
+        btnBattleRound: document.getElementById('btnBattleRound'),
+        btnAutoBattle: document.getElementById('btnAutoBattle'),
+        cooldownTimer: document.getElementById('cooldownTimer'),
+        totalBattles: document.getElementById('totalBattles'),
+        winRate: document.getElementById('winRate'),
+        enemyInfo: document.getElementById('enemyInfo'),
+        enemyName: document.getElementById('enemyName'),
+        enemyLevel: document.getElementById('enemyLevel'),
+        enemyHp: document.getElementById('enemyHp'),
+        enemyHpBar: document.getElementById('enemyHpBar'),
+        
+        // 日志
+        battleLog: document.getElementById('battleLog'),
+        
+        // 系统
+        btnSave: document.getElementById('btnSave'),
+        btnExport: document.getElementById('btnExport'),
+        btnImport: document.getElementById('btnImport'),
+        importFile: document.getElementById('importFile'),
+        btnReset: document.getElementById('btnReset'),
+        saveStatus: document.getElementById('saveStatus'),
+    };
+}
 
 // ==================== 初始化 ====================
 function init() {
+    initElements();
+    
     // 文件导入事件绑定
     elements.importFile.addEventListener('change', onImportData);
     
@@ -78,6 +84,9 @@ function init() {
     // 启动 UI 更新循环
     setInterval(updateUI, 1000);
 }
+
+// DOM 加载完成后初始化
+document.addEventListener('DOMContentLoaded', init);
 
 // ==================== 游戏流程 ====================
 function onNewGame() {
