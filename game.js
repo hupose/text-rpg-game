@@ -421,8 +421,8 @@ class BattleSystem {
     }
     
     // 自动战斗直到结束
-    autoBattle() {
-        if (!this.inBattle) {
+    autoBattle(autoContinue = false) {
+        if (!this.inBattle && !autoContinue) {
             return { success: false, reason: 'no_battle' };
         }
         
@@ -440,6 +440,15 @@ class BattleSystem {
                 if (regen > 0) {
                     this.log(`💚 你恢复了 ${regen} 点生命值`);
                 }
+            }
+        }
+        
+        // 自动刷怪模式：战斗结束后自动开始下一场
+        if (autoContinue && !this.inBattle && this.game.player.currentHp > 0) {
+            const nextBattle = this.game.startBattle();
+            if (nextBattle.success) {
+                this.log(`🔄 自动继续下一场战斗...`);
+                return this.autoBattle(true); // 递归继续
             }
         }
         
@@ -577,8 +586,8 @@ class Game {
     }
     
     // 自动战斗
-    autoBattle() {
-        return this.battleSystem.autoBattle();
+    autoBattle(autoContinue = false) {
+        return this.battleSystem.autoBattle(autoContinue);
     }
     
     // 保存游戏
@@ -718,7 +727,7 @@ const GameAPI = {
                 return game.battleRound();
             
             case 'auto_battle':
-                return game.autoBattle();
+                return game.autoBattle(params.autoContinue || false);
             
             case 'save':
                 return game.save();

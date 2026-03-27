@@ -205,11 +205,14 @@ function onBattleRound() {
 }
 
 function onAutoBattle() {
-    const result = GameAPI.makeDecision('auto_battle');
+    // 自动刷怪模式：打完一场自动继续下一场
+    const result = GameAPI.makeDecision('auto_battle', { autoContinue: true });
     updateUI();
     
     if (result.success) {
-        addLog(`战斗结束，共进行了 ${result.rounds} 回合`, 'system');
+        addLog(`自动战斗结束，共进行了 ${result.rounds} 回合`, 'system');
+    } else if (result.reason === 'no_battle') {
+        addLog('请先开始战斗！', 'system');
     }
 }
 
