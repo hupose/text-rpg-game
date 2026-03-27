@@ -81,6 +81,7 @@ function initElements() {
 // ==================== 初始化 ====================
 function init() {
     initElements();
+    initTheme();
     
     // 文件导入事件绑定
     elements.importFile.addEventListener('change', onImportData);
@@ -94,6 +95,38 @@ function init() {
 
 // DOM 加载完成后初始化
 document.addEventListener('DOMContentLoaded', init);
+
+// ==================== 主题切换 ====================
+function onToggleTheme() {
+    const html = document.documentElement;
+    const btn = document.getElementById('btnToggleTheme');
+    
+    if (html.getAttribute('data-theme') === 'dark') {
+        // 切换到亮色模式
+        html.removeAttribute('data-theme');
+        btn.textContent = '🌙';
+        localStorage.setItem('textRPG_theme', 'light');
+    } else {
+        // 切换到暗色模式
+        html.setAttribute('data-theme', 'dark');
+        btn.textContent = '☀️';
+        localStorage.setItem('textRPG_theme', 'dark');
+    }
+}
+
+// 初始化主题
+function initTheme() {
+    const savedTheme = localStorage.getItem('textRPG_theme');
+    const btn = document.getElementById('btnToggleTheme');
+    
+    if (savedTheme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        btn.textContent = '☀️';
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        btn.textContent = '🌙';
+    }
+}
 
 // ==================== 游戏流程 ====================
 function onNewGame() {
