@@ -68,11 +68,39 @@
                     </div>
                     <span class="exp-text"><span id="playerExp">0</span> / <span id="playerExpNext">100</span> EXP</span>
                 </div>
+                <!-- 金币和药品 -->
+                <!-- 血量条 -->
+                <div style="margin: 12px 0; padding: 8px; background: var(--hp-bg); border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="color: var(--danger-color); font-weight: 600;">❤️ 血量</span>
+                        <span id="statHpDisplay" style="color: var(--text-color);">100/100</span>
+                    </div>
+                    <div class="exp-bar" style="background: rgba(220, 53, 69, 0.2);">
+                        <div id="hpBar" class="exp-fill" style="width: 100%; background: var(--danger-color);"></div>
+                    </div>
+                </div>
+                <!-- 死亡状态 -->
+                <div id="deathStatus" class="hidden" style="margin: 12px 0; padding: 12px; background: rgba(220, 53, 69, 0.3); border-radius: 8px; border: 2px solid var(--danger-color);">
+                    <div style="text-align: center;">
+                        <span style="font-size: 24px; color: var(--danger-color);">💀 你已死亡</span>
+                        <div id="reviveTimer" style="margin-top: 8px; color: var(--text-muted);">复活倒计时: 60秒</div>
+                        <button id="btnRevive" class="btn btn-primary" onclick="onRevive()" style="margin-top: 12px;" disabled>🔄 复活</button>
+                    </div>
+                </div>
+                <!-- 金币和药品 -->
+                <div class="gold-potions-display">
+                    <span class="gold-display">💰 金币: <span id="playerGold">0</span></span>
+                    <span class="potions-display">🧪 药品: <span id="playerPotions">小(0) 中(0) 大(0)</span></span>
+                </div>
             </div>
 
             <!-- 属性面板 -->
             <div class="card">
-                <h3>📊 属性</h3>
+                <div class="card-header">
+                    <h3>📊 属性</h3>
+                    <button class="card-collapse-btn" onclick="onToggleCard(this)">▼</button>
+                </div>
+                <div class="card-content">
                 <div class="stats-grid">
                     <div class="stat-row">
                         <span class="stat-name">💪 力量</span>
@@ -121,11 +149,16 @@
                         <button id="btnCancelAdd" class="btn btn-secondary" onclick="onCancelAddPoints()">取消</button>
                     </div>
                 </div>
+                </div>
             </div>
 
             <!-- 战斗状态 -->
             <div class="card battle-status">
-                <h3>⚔️ 战斗状态</h3>
+                <div class="card-header">
+                    <h3>⚔️ 战斗状态</h3>
+                    <button class="card-collapse-btn" onclick="onToggleCard(this)">▼</button>
+                </div>
+                <div class="card-content">
                 <div id="battleInfo" class="battle-info">
                     <div class="cooldown-info">
                         <span>下次战斗冷却：</span>
@@ -154,21 +187,33 @@
                     <button id="btnStartBattle" class="btn btn-primary btn-block" onclick="onStartBattle()">🔍 寻找敌人</button>
                     <button id="btnBattleRound" class="btn btn-danger btn-block hidden" onclick="onBattleRound()">⚔️ 攻击</button>
                 </div>
+                </div>
             </div>
 
             <!-- 战斗日志 -->
             <div class="card">
-                <h3>📜 战斗日志</h3>
+                <div class="card-header">
+                    <h3>📜 战斗日志</h3>
+                    <button class="card-collapse-btn" onclick="onToggleCard(this)">▼</button>
+                </div>
+                <div class="card-content">
                 <div id="battleLog" class="battle-log">
                     <div class="log-entry system">等待开始冒险...</div>
+                </div>
                 </div>
             </div>
 
             <!-- 系统操作 -->
             <div class="card">
-                <h3>⚙️ 系统</h3>
+                <div class="card-header">
+                    <h3>⚙️ 系统</h3>
+                    <button class="card-collapse-btn" onclick="onToggleCard(this)">▼</button>
+                </div>
+                <div class="card-content">
                 <div class="system-actions">
                     <button id="btnSave" class="btn btn-success" onclick="onSaveGame()">💾 保存进度</button>
+                    <button id="btnOpenShop" class="btn btn-warning" onclick="onOpenShop()">🏪 商店</button>
+                    <button id="btnUsePotion" class="btn btn-primary" onclick="onOpenPotionPanel()">🧪 使用药品</button>
                     <button id="btnExport" class="btn btn-secondary" onclick="onExportData()">📤 导出数据</button>
                     <button id="btnImport" class="btn btn-secondary" onclick="document.getElementById('importFile').click()">📥 导入数据</button>
                     <button id="btnReset" class="btn btn-danger" onclick="onResetGame()">🔄 重置游戏</button>
@@ -202,11 +247,79 @@
                 </div>
                 
                 <div class="save-status" id="saveStatus"></div>
+                </div>
             </div>
         </div>
 
         <!-- 隐藏的文件输入（用于导入） -->
         <input type="file" id="importFile" accept=".json" class="hidden">
+        
+        <!-- 商店面板 -->
+        <div id="shopPanel" class="shop-panel hidden">
+            <div class="shop-header">
+                <h3>🏪 商店</h3>
+                <button class="shop-close-btn" onclick="onCloseShop()">✕</button>
+            </div>
+            <div class="shop-item">
+                <div class="shop-item-info">
+                    <div class="shop-item-name">🧪 小血瓶</div>
+                    <div class="shop-item-desc">恢复 30% 血量</div>
+                </div>
+                <span class="shop-item-price">💰 20</span>
+                <button class="shop-buy-btn" onclick="onBuyPotion('small')">购买</button>
+            </div>
+            <div class="shop-item">
+                <div class="shop-item-info">
+                    <div class="shop-item-name">🧪 中血瓶</div>
+                    <div class="shop-item-desc">恢复 50% 血量</div>
+                </div>
+                <span class="shop-item-price">💰 50</span>
+                <button class="shop-buy-btn" onclick="onBuyPotion('medium')">购买</button>
+            </div>
+            <div class="shop-item">
+                <div class="shop-item-info">
+                    <div class="shop-item-name">🧪 大血瓶</div>
+                    <div class="shop-item-desc">恢复 80% 血量</div>
+                </div>
+                <span class="shop-item-price">💰 100</span>
+                <button class="shop-buy-btn" onclick="onBuyPotion('large')">购买</button>
+            </div>
+            <div class="shop-footer">
+                当前金币：<span class="shop-gold" id="shopGoldDisplay">0</span>
+            </div>
+        </div>
+        
+        <!-- 药品使用面板 -->
+        <div id="potionPanel" class="potion-panel hidden">
+            <div class="potion-header">
+                <h3>🧪 使用药品</h3>
+                <button class="shop-close-btn" onclick="onClosePotionPanel()">✕</button>
+            </div>
+            <div class="potion-item">
+                <div class="potion-item-info">
+                    <span class="potion-item-name">🧪 小血瓶</span>
+                    <span class="potion-count">(恢复 30%)</span>
+                </div>
+                <span>持有: <span id="potionSmallCount">0</span></span>
+                <button class="potion-use-btn" onclick="onUsePotion('small')">使用</button>
+            </div>
+            <div class="potion-item">
+                <div class="potion-item-info">
+                    <span class="potion-item-name">🧪 中血瓶</span>
+                    <span class="potion-count">(恢复 50%)</span>
+                </div>
+                <span>持有: <span id="potionMediumCount">0</span></span>
+                <button class="potion-use-btn" onclick="onUsePotion('medium')">使用</button>
+            </div>
+            <div class="potion-item">
+                <div class="potion-item-info">
+                    <span class="potion-item-name">🧪 大血瓶</span>
+                    <span class="potion-count">(恢复 80%)</span>
+                </div>
+                <span>持有: <span id="potionLargeCount">0</span></span>
+                <button class="potion-use-btn" onclick="onUsePotion('large')">使用</button>
+            </div>
+        </div>
     </div>
 </body>
 </html>

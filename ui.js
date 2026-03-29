@@ -7,6 +7,7 @@
 let selectedStat = null;
 let autoFarmTimer = null; // 自动刷怪定时器
 let autoBattleEnabled = false; // 自动战斗开关
+let wasAutoFarming = false; // 记录死亡前是否在自动刷怪
 
 // ==================== DOM 元素 ====================
 let elements = {};
@@ -29,6 +30,15 @@ function initElements() {
         playerExp: document.getElementById('playerExp'),
         playerExpNext: document.getElementById('playerExpNext'),
         expBar: document.getElementById('expBar'),
+        
+        // 金币和药品
+        playerGold: document.getElementById('playerGold'),
+        playerPotions: document.getElementById('playerPotions'),
+        
+        // 死亡状态
+        deathStatus: document.getElementById('deathStatus'),
+        reviveTimer: document.getElementById('reviveTimer'),
+        btnRevive: document.getElementById('btnRevive'),
         
         // 属性
         statStrength: document.getElementById('statStrength'),
@@ -80,6 +90,17 @@ function initElements() {
         autoBattleToggle: document.getElementById('autoBattleToggle'),
         autoBattleSlider: document.getElementById('autoBattleSlider'),
         autoBattleStatus: document.getElementById('autoBattleStatus'),
+        
+        // 商店
+        shopPanel: document.getElementById('shopPanel'),
+        btnOpenShop: document.getElementById('btnOpenShop'),
+        btnCloseShop: document.getElementById('btnCloseShop'),
+        shopGoldDisplay: document.getElementById('shopGoldDisplay'),
+        
+        // 使用药品
+        potionPanel: document.getElementById('potionPanel'),
+        btnUsePotion: document.getElementById('btnUsePotion'),
+        btnClosePotionPanel: document.getElementById('btnClosePotionPanel'),
     };
 }
 
@@ -103,6 +124,107 @@ function init() {
     
     // 启动 UI 更新循环
     setInterval(updateUI, 1000);
+    
+    // 启动复活倒计时检查（每秒检查一次）
+    setInterval(checkReviveStatus, 1000);
+}
+
+// 检查复活状态
+function checkReviveStatus() {
+    const state = GameAPI.getState();
+    if (state.player && state.player.isDead && state.player.reviveRemaining <= 0) {
+        // 可以复活了，自动复活
+        const result = GameAPI.makeDecision('revive');
+        if (result.success) {
+            addLog('✅ 自动复活成功！可以继续战斗了！', 'success');
+            updateUI();
+            
+            // 如果之前在自动刷怪，恢复刷怪
+            if (wasAutoFarming) {
+                wasAutoFarming = false;
+                setTimeout(() => {
+                    onStartAutoFarm();
+                    addLog('🔄 自动刷怪已恢复', 'system');
+                }, 1000);
+            }
+        }
+    }
+}
+
+// ==================== 商店系统 ====================
+function onOpenShop() {
+    elements.shopPanel.classList.remove('hidden');
+    updateShopDisplay();
+}
+
+function onCloseShop() {
+    elements.shopPanel.classList.add('hidden');
+}
+
+function updateShopDisplay() {
+    const state = GameAPI.getState();
+    if (state.player) {
+        elements.shopGoldDisplay.textContent = state.player.gold;
+    }
+}
+
+function onBuyPotion(potionType) {
+    const result = GameAPI.makeDecision('buy_potion', { potionType });
+    
+    if (result.success) {
+        addLog(result.message, 'success');
+        updateUI();
+        updateShopDisplay();
+    } else {
+        if (result.reason === 'not_enough_gold') {
+            addLog(`金币不足！需要 ${result.required}，当前 ${result.current}`, 'system');
+        } else {
+            addLog('购买失败', 'system');
+        }
+    }
+}
+
+// ==================== 药品使用 ====================
+function onOpenPotionPanel() {
+    elements.potionPanel.classList.remove('hidden');
+    updatePotionDisplay();
+}
+
+function onClosePotionPanel() {
+    elements.potionPanel.classList.add('hidden');
+}
+
+function updatePotionDisplay() {
+    const state = GameAPI.getState();
+    if (!state.player) return;
+    
+    // 更新药品数量显示
+    const potions = state.player.potions;
+    document.getElementById('potionSmallCount').textContent = potions.small;
+    document.getElementById('potionMediumCount').textContent = potions.medium;
+    document.getElementById('potionLargeCount').textContent = potions.large;
+}
+
+function onUsePotion(potionType) {
+    const result = GameAPI.makeDecision('use_potion', { potionType });
+    
+    if (result.success) {
+        addLog(result.message, 'success');
+        updateUI();
+        updatePotionDisplay();
+        
+        // 如果战斗中，显示回血效果
+        const state = GameAPI.getState();
+        if (state.battle.inBattle) {
+            addLog(`💚 当前血量：${result.currentHp}/${state.player.maxHp}`, 'battle');
+        }
+    } else {
+        if (result.reason === 'no_potion') {
+            addLog('没有该类型药品！', 'system');
+        } else {
+            addLog('使用失败', 'system');
+        }
+    }
 }
 
 // DOM 加载完成后初始化
@@ -123,6 +245,41 @@ function onToggleTheme() {
         html.setAttribute('data-theme', 'dark');
         btn.textContent = '☀️';
         localStorage.setItem('textRPG_theme', 'dark');
+    }
+}
+
+// ==================== 卡片折叠 ====================
+function onToggleCard(btn) {
+    const card = btn.closest('.card');
+    const content = card.querySelector('.card-content');
+    
+    if (content.classList.contains('collapsed')) {
+        // 展开
+        content.classList.remove('collapsed');
+        btn.classList.remove('collapsed');
+        btn.textContent = '▼';
+    } else {
+        // 收起
+        content.classList.add('collapsed');
+        btn.classList.add('collapsed');
+        btn.textContent = '▶';
+    }
+}
+
+// ==================== 复活 ====================
+function onRevive() {
+    const result = GameAPI.makeDecision('revive');
+    
+    if (result.success) {
+        addLog('✅ ' + result.message, 'success');
+        updateUI();
+    } else {
+        if (result.reason === 'revive_not_ready') {
+            const seconds = Math.ceil(result.remainingMs / 1000);
+            addLog(`复活时间未到，还需等待 ${seconds} 秒`, 'system');
+        } else {
+            addLog('复活失败', 'system');
+        }
     }
 }
 
@@ -232,6 +389,19 @@ function onCancelAddPoints() {
 function onStartBattle() {
     console.log('[Battle] Start battle, autoBattleEnabled =', autoBattleEnabled);
     
+    // 战斗前检查血量，如果血量低于70%且有药品，自动吃药
+    const state = GameAPI.getState();
+    if (state.player && !state.player.isDead) {
+        const hpPercent = state.player.currentHp / state.player.maxHp;
+        if (hpPercent < 0.7) {
+            const potionResult = GameAPI.makeDecision('auto_use_potion');
+            if (potionResult && potionResult.success) {
+                addLog(`🧪 战斗前自动吃药：${potionResult.message}`, 'system');
+                updateUI();
+            }
+        }
+    }
+    
     const result = GameAPI.makeDecision('start_battle');
     
     if (result.success) {
@@ -248,6 +418,19 @@ function onStartBattle() {
                 
                 if (autoResult.success) {
                     addLog(`⚡ 自动战斗结束，共 ${autoResult.rounds} 回合`, 'system');
+                    
+                    // 战斗结束后再次检查血量，如果低于70%且有药品，自动吃药
+                    const newState = GameAPI.getState();
+                    if (newState.player && !newState.player.isDead) {
+                        const newHpPercent = newState.player.currentHp / newState.player.maxHp;
+                        if (newHpPercent < 0.7) {
+                            const postPotionResult = GameAPI.makeDecision('auto_use_potion');
+                            if (postPotionResult && postPotionResult.success) {
+                                addLog(`🧪 战斗后自动吃药：${postPotionResult.message}`, 'system');
+                                updateUI();
+                            }
+                        }
+                    }
                 }
                 console.log('[Battle] Auto battle result:', autoResult);
             }, 500);
@@ -361,6 +544,8 @@ function onStopAutoFarm() {
         autoFarmTimer = null;
     }
     
+    wasAutoFarming = false; // 手动停止时重置
+    
     // 恢复按钮状态
     document.getElementById('btnStartAutoFarm').classList.remove('hidden');
     document.getElementById('btnStopAutoFarm').classList.add('hidden');
@@ -373,10 +558,32 @@ function onStopAutoFarm() {
 function runAutoFarmCycle() {
     const state = GameAPI.getState();
     
+    // 检查死亡状态
+    if (state.player && state.player.isDead) {
+        const reviveRemaining = state.player.reviveRemaining || 0;
+        if (reviveRemaining > 0) {
+            const seconds = Math.ceil(reviveRemaining / 1000);
+            updateAutoFarmStatus(`💀 已死亡，等待复活... ${seconds}秒`);
+            return;
+        }
+    }
+    
     // 检查是否可以先开始战斗
     if (state.battle.cooldownRemaining > 0) {
         updateAutoFarmStatus(`⏳ 冷却中… ${Math.ceil(state.battle.cooldownRemaining / 1000)}s`);
         return;
+    }
+    
+    // 战斗前自动检查血量，如果血量低于70%且有药品，自动吃药
+    if (state.player && !state.player.isDead) {
+        const hpPercent = state.player.currentHp / state.player.maxHp;
+        if (hpPercent < 0.7) {
+            const potionResult = GameAPI.makeDecision('auto_use_potion');
+            if (potionResult && potionResult.success) {
+                addLog(`🧪 战斗前自动吃药：${potionResult.message}`, 'system');
+                updateUI();
+            }
+        }
     }
     
     // 开始战斗
@@ -400,10 +607,32 @@ function runAutoFarmCycle() {
         if (autoResult.success) {
             updateAutoFarmStatus(`✅ 胜利！共 ${autoResult.rounds} 回合`);
             addLog(`📊 刷怪进度：+${autoResult.rounds} 回合战斗`, 'system');
+            
+            // 战斗结束后再次检查血量，如果低于70%且有药品，自动吃药
+            const newState = GameAPI.getState();
+            if (newState.player && !newState.player.isDead) {
+                const newHpPercent = newState.player.currentHp / newState.player.maxHp;
+                if (newHpPercent < 0.7) {
+                    const postPotionResult = GameAPI.makeDecision('auto_use_potion');
+                    if (postPotionResult && postPotionResult.success) {
+                        addLog(`🧪 战斗后自动吃药：${postPotionResult.message}`, 'system');
+                        updateUI();
+                    }
+                }
+            }
         } else {
             updateAutoFarmStatus(`❌ 战斗失败`);
             addLog('❌ 战斗失败，自动刷怪已停止', 'error');
+            
+            // 记录之前在自动刷怪，复活后恢复
+            if (autoFarmTimer) {
+                wasAutoFarming = true;
+            }
+            
             onStopAutoFarm();
+            
+            // 更新死亡状态显示
+            updateUI();
         }
     }, 500);
 }
@@ -502,6 +731,51 @@ function updateUI() {
     const expPercent = (player.exp / player.expToNext) * 100;
     elements.expBar.style.width = `${expPercent}%`;
     
+    // 金币和药品
+    if (elements.playerGold) {
+        elements.playerGold.textContent = player.gold;
+    }
+    if (elements.playerPotions) {
+        const potions = player.potions;
+        elements.playerPotions.textContent = `小(${potions.small}) 中(${potions.medium}) 大(${potions.large})`;
+    }
+    
+    // 头部血量条
+    const hpBarEl = document.getElementById('hpBar');
+    const hpDisplayEl = document.getElementById('statHpDisplay');
+    if (hpBarEl) {
+        const hpPercent = (player.currentHp / player.maxHp) * 100;
+        hpBarEl.style.width = `${hpPercent}%`;
+    }
+    if (hpDisplayEl) {
+        hpDisplayEl.textContent = `${player.currentHp}/${player.maxHp}`;
+    }
+    
+    // 死亡状态
+    const deathStatusEl = document.getElementById('deathStatus');
+    const reviveTimerEl = document.getElementById('reviveTimer');
+    const btnReviveEl = document.getElementById('btnRevive');
+    
+    if (player.isDead) {
+        if (deathStatusEl) deathStatusEl.classList.remove('hidden');
+        if (hpBarEl) hpBarEl.style.width = '0%';
+        if (hpDisplayEl) hpDisplayEl.textContent = '💀 已死亡';
+        
+        // 复活倒计时
+        const reviveRemaining = player.reviveRemaining || 0;
+        const reviveSeconds = Math.ceil(reviveRemaining / 1000);
+        
+        if (reviveRemaining > 0) {
+            if (reviveTimerEl) reviveTimerEl.textContent = `复活倒计时: ${reviveSeconds}秒`;
+            if (btnReviveEl) btnReviveEl.disabled = true;
+        } else {
+            if (reviveTimerEl) reviveTimerEl.textContent = '可以复活了！';
+            if (btnReviveEl) btnReviveEl.disabled = false;
+        }
+    } else {
+        if (deathStatusEl) deathStatusEl.classList.add('hidden');
+    }
+    
     // 属性
     elements.statStrength.textContent = player.strength;
     elements.statMagic.textContent = player.magic;
@@ -533,6 +807,15 @@ function updateUI() {
         elements.enemyInfo.classList.add('hidden');
         elements.btnBattleRound.classList.add('hidden');
         elements.btnStartBattle.classList.remove('hidden');
+        
+        // 死亡时禁用战斗按钮
+        if (player.isDead) {
+            elements.btnStartBattle.disabled = true;
+            elements.btnStartBattle.textContent = '💀 已死亡，无法战斗';
+        } else {
+            elements.btnStartBattle.disabled = false;
+            elements.btnStartBattle.textContent = '🔍 寻找敌人';
+        }
     }
     
     // 保存按钮状态

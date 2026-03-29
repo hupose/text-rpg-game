@@ -20,6 +20,38 @@ const CONFIG = {
     // 每级属性点
     POINTS_PER_LEVEL: 3,
     
+    // 金币奖励配置
+    GOLD_REWARDS: {
+        normalEnemy: 10,   // 小怪：等级 × 10
+        bossEnemy: 50,     // BOSS：等级 × 50
+        levelUp: 100,      // 升级：等级 × 100
+    },
+    
+    // 药品配置
+    POTION_CONFIG: {
+        small: { 
+            name: '小血瓶', 
+            cost: 20, 
+            healPercent: 0.3,
+            icon: '🧪'
+        },
+        medium: { 
+            name: '中血瓶', 
+            cost: 50, 
+            healPercent: 0.5,
+            icon: '🧪'
+        },
+        large: { 
+            name: '大血瓶', 
+            cost: 100, 
+            healPercent: 0.8,
+            icon: '🧪'
+        },
+    },
+    
+    // 自动药品策略
+    AUTO_POTION_THRESHOLD: 0.3,  // 血量 < 30% 时自动吃药
+    
     // 职业加成配置
     CLASS_BONUSES: {
         physical: {
@@ -50,6 +82,9 @@ const CONFIG = {
     
     // 存档键名
     SAVE_KEY: 'textRPG_save_v1',
+    
+    // 死亡复活时间（秒）
+    DEATH_REVIVE_TIME: 60,
     
     // 状态文件路径（OpenClaw 可读取）
     STATE_FILE: 'game_state.json'
@@ -93,9 +128,53 @@ class Character {
             defense: 5,
         };
         
+        // 金币
+        this.gold = 0;
+        
+        // 药品持有
+        this.potions = {
+            small: 0,
+            medium: 0,
+            large: 0,
+        };
+        
         // 战斗状态
         this.currentHp = this.getMaxHp();
         this.hpRegen = this.getHpRegen();
+        
+        // 死亡状态
+        this.isDead = false;
+        this.deathTime = null;
+        this.reviveTime = null;
+    }
+    
+    // 检查是否可以复活
+    canRevive() {
+        if (!this.isDead) return true;
+        if (!this.reviveTime) return false;
+        return Utils.now() >= this.reviveTime;
+    }
+    
+    // 获取复活剩余时间（毫秒）
+    getReviveRemaining() {
+        if (!this.isDead || !this.reviveTime) return 0;
+        return Math.max(0, this.reviveTime - Utils.now());
+    }
+    
+    // 死亡
+    die() {
+        this.isDead = true;
+        this.currentHp = 0;
+        this.deathTime = Utils.now();
+        this.reviveTime = Utils.now() + CONFIG.DEATH_REVIVE_TIME * 1000;
+    }
+    
+    // 复活
+    revive() {
+        this.isDead = false;
+        this.currentHp = this.getMaxHp();
+        this.deathTime = null;
+        this.reviveTime = null;
     }
     
     getClassBonus(statName) {
@@ -180,10 +259,14 @@ class Character {
         this.expToNext = this.calcExpToNext(this.level);
         this.unusedPoints += CONFIG.POINTS_PER_LEVEL;
         
+        // 升级金币奖励
+        const goldReward = this.level * CONFIG.GOLD_REWARDS.levelUp;
+        this.gold += goldReward;
+        
         // 回满血
         this.currentHp = this.getMaxHp();
         
-        return this.level;
+        return { level: this.level, goldGained: goldReward };
     }
     
     calcExpToNext(level) {
@@ -226,6 +309,14 @@ class Character {
             currentHp: this.currentHp,
             maxHp: this.getMaxHp(),
             hpRegen: this.getHpRegen(),
+            // 金币和药品
+            gold: this.gold,
+            potions: { ...this.potions },
+            // 死亡状态
+            isDead: this.isDead,
+            deathTime: this.deathTime,
+            reviveTime: this.reviveTime,
+            reviveRemaining: this.getReviveRemaining(),
             // 计算属性（只读）
             strength: this.getStrength(),
             magic: this.getMagic(),
@@ -244,6 +335,13 @@ class Character {
         char.unusedPoints = data.unusedPoints;
         char.baseStats = { ...data.baseStats };
         char.currentHp = data.currentHp;
+        // 金币和药品（兼容旧存档）
+        char.gold = data.gold || 0;
+        char.potions = data.potions || { small: 0, medium: 0, large: 0 };
+        // 死亡状态（兼容旧存档）
+        char.isDead = data.isDead || false;
+        char.deathTime = data.deathTime || null;
+        char.reviveTime = data.reviveTime || null;
         return char;
     }
 }
@@ -340,6 +438,11 @@ class BattleSystem {
         if (this.inBattle) return false;
         if (!this.game.player.isAlive()) return false;
         
+        // 检查死亡状态
+        if (this.game.player.isDead && !this.game.player.canRevive()) {
+            return false;
+        }
+        
         const cooldownMs = (this.lastBattleTime === 0) ? 0 : 
             (CONFIG.BATTLE_COOLDOWN_MIN * 1000);
         return Utils.now() - this.lastBattleTime >= cooldownMs;
@@ -387,7 +490,10 @@ class BattleSystem {
         const attackerName = isPlayer ? '你' : attacker.name;
         const defenderName = isPlayer ? defender.name : '你';
         
-        this.log(`${attackerName} 攻击 ${defenderName}，造成 ${damage} 点伤害（${defenderName} HP: ${defender.currentHp}/${defender.maxHp || defender.currentHp}）`);
+        // 正确获取 maxHp（玩家用方法，敌人用属性）
+        const defenderMaxHp = defender.getMaxHp ? defender.getMaxHp() : defender.maxHp;
+        
+        this.log(`${attackerName} 攻击 ${defenderName}，造成 ${damage} 点伤害（${defenderName} HP: ${defender.currentHp}/${defenderMaxHp}）`);
         
         return damage;
     }
@@ -464,20 +570,32 @@ class BattleSystem {
                 Math.floor(this.currentEnemy.level * 50) : 
                 Math.floor(this.currentEnemy.level * 20);
             
-            this.log(`🎉 战斗胜利！获得 ${expReward} 点经验值`);
-            this.game.player.gainExp(expReward);
+            // 金币奖励
+            const goldReward = this.currentEnemy.isBoss ?
+                Math.floor(this.currentEnemy.level * CONFIG.GOLD_REWARDS.bossEnemy) :
+                Math.floor(this.currentEnemy.level * CONFIG.GOLD_REWARDS.normalEnemy);
+            this.game.player.gold += goldReward;
+            
+            this.log(`🎉 战斗胜利！获得 ${expReward} 经验 + ${goldReward} 金币`);
+            const levelUpResult = this.game.player.gainExp(expReward);
+            
+            // 如果升级了，显示升级信息
+            if (levelUpResult && levelUpResult.goldGained) {
+                this.log(`⬆️ 升级！Lv.${levelUpResult.level} 获得 ${levelUpResult.goldGained} 金币`);
+            }
             
             // 通知 UI
             if (this.game.onBattleEnd) {
-                this.game.onBattleEnd('win', expReward);
+                this.game.onBattleEnd('win', expReward, goldReward);
             }
         } else {
             this.loseCount++;
             this.log(`💀 战斗失败！你被击败了...`);
-            this.game.player.heal(); // 复活并回满血
+            this.log(`⏳ 需要等待 ${CONFIG.DEATH_REVIVE_TIME} 秒才能复活`);
+            this.game.player.die(); // 设置死亡状态
             
             if (this.game.onBattleEnd) {
-                this.game.onBattleEnd('lose', 0);
+                this.game.onBattleEnd('lose', 0, 0);
             }
         }
         
@@ -487,6 +605,7 @@ class BattleSystem {
         return {
             win: playerWin,
             expGained: playerWin ? Math.floor(enemy.level * (enemy.isBoss ? 50 : 20)) : 0,
+            goldGained: playerWin ? Math.floor(enemy.level * (enemy.isBoss ? CONFIG.GOLD_REWARDS.bossEnemy : CONFIG.GOLD_REWARDS.normalEnemy)) : 0,
             enemy: enemy.toJSON()
         };
     }
@@ -588,6 +707,141 @@ class Game {
     // 自动战斗
     autoBattle(autoContinue = false) {
         return this.battleSystem.autoBattle(autoContinue);
+    }
+    
+    // 购买药品
+    buyPotion(potionType) {
+        if (!this.player) {
+            return { success: false, reason: 'no_player' };
+        }
+        
+        const potion = CONFIG.POTION_CONFIG[potionType];
+        if (!potion) {
+            return { success: false, reason: 'invalid_potion_type' };
+        }
+        
+        if (this.player.gold < potion.cost) {
+            return { 
+                success: false, 
+                reason: 'not_enough_gold',
+                required: potion.cost,
+                current: this.player.gold
+            };
+        }
+        
+        this.player.gold -= potion.cost;
+        this.player.potions[potionType]++;
+        this.notifyStateChange();
+        
+        return {
+            success: true,
+            message: `购买了 ${potion.icon} ${potion.name}`,
+            goldRemaining: this.player.gold,
+            potionCount: this.player.potions[potionType]
+        };
+    }
+    
+    // 使用药品
+    usePotion(potionType) {
+        if (!this.player) {
+            return { success: false, reason: 'no_player' };
+        }
+        
+        const potion = CONFIG.POTION_CONFIG[potionType];
+        if (!potion) {
+            return { success: false, reason: 'invalid_potion_type' };
+        }
+        
+        if (this.player.potions[potionType] <= 0) {
+            return { success: false, reason: 'no_potion', potionType };
+        }
+        
+        this.player.potions[potionType]--;
+        const healAmount = Math.floor(this.player.getMaxHp() * potion.healPercent);
+        this.player.currentHp = Math.min(this.player.currentHp + healAmount, this.player.getMaxHp());
+        this.notifyStateChange();
+        
+        return {
+            success: true,
+            message: `使用了 ${potion.icon} ${potion.name}，恢复 ${healAmount} 血量`,
+            healAmount,
+            currentHp: this.player.currentHp,
+            potionRemaining: this.player.potions[potionType]
+        };
+    }
+    
+    // 自动使用药品（精细化逻辑 + fallback）
+    autoUsePotion() {
+        if (!this.player) return null;
+        
+        // 已死亡，不能吃药
+        if (this.player.isDead) return null;
+        
+        const hpPercent = this.player.currentHp / this.player.getMaxHp();
+        
+        // 血量 > 70%，不需要吃药
+        if (hpPercent > 0.7) {
+            return null;
+        }
+        
+        // 根据血量选择药品类型
+        let preferredType = null;
+        if (hpPercent <= 0.3) {
+            preferredType = 'large';  // 血量 ≤30% → 首选大血瓶
+        } else if (hpPercent <= 0.5) {
+            preferredType = 'medium'; // 血量 ≤50% >30% → 首选中血瓶
+        } else if (hpPercent <= 0.7) {
+            preferredType = 'small';  // 血量 ≤70% >50% → 首选小血瓶
+        }
+        
+        // Fallback 逻辑：没有首选药品，尝试更小的（节省药品）
+        // 特例：小血瓶没有时可以升级（血量高，浪费一点无所谓）
+        const fallbackOrder = {
+            large: ['large', 'medium', 'small'],  // 大血瓶没有 → 中血瓶 → 小血瓶
+            medium: ['medium', 'small'],          // 中血瓶没有 → 小血瓶（不要浪费大血瓶）
+            small: ['small', 'medium', 'large']   // 小血瓶没有 → 中血瓶 → 大血瓶
+        };
+        
+        const tryOrder = fallbackOrder[preferredType] || ['large', 'medium', 'small'];
+        
+        for (const type of tryOrder) {
+            if (this.player.potions[type] > 0) {
+                const result = this.usePotion(type);
+                if (result.success) {
+                    // 如果使用了 fallback 药品，提示一下
+                    if (type !== preferredType) {
+                        result.message += `（首选 ${CONFIG.POTION_CONFIG[preferredType].name} 无库存，使用 ${CONFIG.POTION_CONFIG[type].name}）`;
+                    }
+                    return result;
+                }
+            }
+        }
+        
+        return null; // 没有药品可用
+    }
+    
+    // 复活
+    revive() {
+        if (!this.player) {
+            return { success: false, reason: 'no_player' };
+        }
+        
+        if (!this.player.isDead) {
+            return { success: false, reason: 'not_dead' };
+        }
+        
+        if (!this.player.canRevive()) {
+            return {
+                success: false,
+                reason: 'revive_not_ready',
+                remainingMs: this.player.getReviveRemaining()
+            };
+        }
+        
+        this.player.revive();
+        this.notifyStateChange();
+        
+        return { success: true, message: '你已复活！血量已恢复。' };
     }
     
     // 保存游戏
@@ -728,6 +982,18 @@ const GameAPI = {
             
             case 'auto_battle':
                 return game.autoBattle((params && params.autoContinue) || false);
+            
+            case 'buy_potion':
+                return game.buyPotion(params.potionType);
+            
+            case 'use_potion':
+                return game.usePotion(params.potionType);
+            
+            case 'auto_use_potion':
+                return game.autoUsePotion();
+            
+            case 'revive':
+                return game.revive();
             
             case 'save':
                 return game.save();
