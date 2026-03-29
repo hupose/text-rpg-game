@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文字 RPG - 放置冒险</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <header class="header">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h1 style="margin: 0;">⚔️ 文字 RPG</h1>
+                <button id="btnToggleTheme" onclick="onToggleTheme()" style="background: rgba(255,255,255,0.2); border: none; color: white; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 18px;" title="切换主题">🌙</button>
+            </div>
+            <p class="subtitle">放置 · 升级 · 战斗</p>
+            <div id="connectionStatus" style="font-size: 12px; margin-top: 5px; opacity: 0.8;"></div>
+        </header>
+
+        <!-- 连接配置界面 -->
+        <div id="connectScreen" class="screen">
+            <div class="card">
+                <h2>🔗 连接服务器</h2>
+                <div class="form-group">
+                    <label>服务器地址 (baseUrl)</label>
+                    <input type="text" id="baseUrlInput" placeholder="http://localhost:3000" value="http://localhost:3000">
+                </div>
+                <div class="form-group">
+                    <label>游戏 ID（可选，用于多存档）</label>
+                    <input type="text" id="gameIdInput" placeholder="default" value="default">
+                </div>
+                <button id="btnConnect" class="btn btn-primary btn-block" onclick="onConnect()">连接服务器</button>
+                <div id="connectError" class="error-message hidden"></div>
+            </div>
+        </div>
+
+        <!-- 新游戏界面 -->
+        <div id="newGameScreen" class="screen hidden">
+            <div class="card">
+                <h2>创建角色</h2>
+                <div class="form-group">
+                    <label>角色名称</label>
+                    <input type="text" id="playerName" placeholder="输入你的名字" value="勇者">
+                </div>
+                <div class="form-group">
+                    <label>选择职业</label>
+                    <div class="class-selector">
+                        <label class="class-option">
+                            <input type="radio" name="classType" value="physical" checked>
+                            <div class="class-card">
+                                <h3>🗡️ 物理</h3>
+                                <p>力量 +20%，体力 +10%</p>
+                                <p class="hint">适合近战输出</p>
+                            </div>
+                        </label>
+                        <label class="class-option">
+                            <input type="radio" name="classType" value="magical">
+                            <div class="class-card">
+                                <h3>🔮 魔法</h3>
+                                <p>魔法 +20%</p>
+                                <p class="hint">适合法术输出</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+                <button id="btnNewGame" class="btn btn-primary btn-block" onclick="onNewGame()">开始冒险</button>
+                <button id="btnLoadGame" class="btn btn-secondary btn-block" onclick="onLoadGame()">读取存档</button>
+                <button id="btnBackToConnect" class="btn btn-secondary btn-block" onclick="onBackToConnect()">返回连接</button>
+            </div>
+        </div>
+
+        <!-- 主游戏界面 -->
+        <div id="gameScreen" class="screen hidden">
+            <!-- 角色信息 -->
+            <div class="card character-card">
+                <div class="character-header">
+                    <h2 id="playerNameDisplay">勇者</h2>
+                    <span id="playerClass" class="class-badge">物理</span>
+                </div>
+                <div class="level-info">
+                    <span class="level">Lv.<span id="playerLevel">1</span></span>
+                    <div class="exp-bar">
+                        <div id="expBar" class="exp-fill" style="width: 0%"></div>
+                    </div>
+                    <span class="exp-text"><span id="playerExp">0</span> / <span id="playerExpNext">100</span> EXP</span>
+                </div>
+                <!-- 血量条 -->
+                <div style="margin: 12px 0; padding: 8px; background: var(--hp-bg); border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                        <span style="color: var(--danger-color); font-weight: 600;">❤️ 血量</span>
+                        <span id="statHpDisplay" style="color: var(--text-color);">100/100</span>
+                    </div>
+                    <div class="exp-bar" style="background: rgba(220, 53, 69, 0.2);">
+                        <div id="hpBar" class="exp-fill" style="width: 100%; background: var(--danger-color);"></div>
+                    </div>
+                </div>
+                <!-- 死亡状态 -->
+                <div id="deathStatus" class="hidden" style="margin: 12px 0; padding: 12px; background: rgba(220, 53, 69, 0.3); border-radius: 8px; border: 2px solid var(--danger-color);">
+                    <div style="text-align: center;">
+                        <span style="font-size: 24px; color: var(--danger-color);">💀 你已死亡</span>
+                        <div id="reviveTimer" style="margin-top: 8px; color: var(--text-muted);">⏳ 自动复活倒计时: 60秒</div>
+                        <button id="btnRevive" class="btn btn-primary hidden" onclick="onRevive()" style="margin-top: 12px;">🔄 立即复活</button>
+                    </div>
+                </div>
+                <!-- 金币和药品 -->
+                <div class="gold-potions-display">
+                    <span class="gold-display">💰 金币: <span id="playerGold">0</span></span>
+                    <span class="potions-display">🧪 药品: <span id="playerPotions">小(0) 中(0) 大(0)</span></span>
+                </div>
+            </div>
+
+            <!-- 战斗日志 -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>📜 战斗日志</h3>
+                    <button class="card-collapse-btn" onclick="onToggleCard(this)">▼</button>
+                </div>
+                <div class="card-content">
+                <div id="battleLog" class="battle-log">
+                    <div class="log-entry system">等待开始冒险...</div>
+                </div>
+                </div>
+            </div>
+
+            <!-- 属性面板 -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>📊 属性</h3>
+                    <button class="card-collapse-btn" onclick="onToggleCard(this)">▼</button>
+                </div>
+                <div class="card-content">
+                <div class="stats-grid">
+                    <div class="stat-row">
+                        <span class="stat-name">💪 力量</span>
+                        <span class="stat-value" id="statStrength">5</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-name">🔮 魔法</span>
+                        <span class="stat-value" id="statMagic">5</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-name">🏃 体力</span>
+                        <span class="stat-value" id="statStamina">10</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-name">🛡️ 防御</span>
+                        <span class="stat-value" id="statDefense">5</span>
+                    </div>
+                    <div class="stat-row highlight">
+                        <span class="stat-name">❤️ 血量</span>
+                        <span class="stat-value" id="statHp">100/100</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-name">💚 回血</span>
+                        <span class="stat-value" id="statRegen">1/s</span>
+                    </div>
+                    <div class="stat-row highlight">
+                        <span class="stat-name">⚔️ 攻击</span>
+                        <span class="stat-value" id="statAttack">15</span>
+                    </div>
+                </div>
+                
+                <!-- 加点区域 -->
+                <div class="points-section">
+                    <div class="unused-points">
+                        可用属性点：<span id="unusedPoints" class="points-count">0</span>
+                    </div>
+                    <div class="add-points-grid">
+                        <button class="btn-add-point" onclick="onAddPointClick('strength')">力量 +</button>
+                        <button class="btn-add-point" onclick="onAddPointClick('magic')">魔法 +</button>
+                        <button class="btn-add-point" onclick="onAddPointClick('stamina')">体力 +</button>
+                        <button class="btn-add-point" onclick="onAddPointClick('defense')">防御 +</button>
+                    </div>
+                    <div class="add-points-actions hidden" id="addPointsActions">
+                        <input type="number" id="addPointsInput" min="1" max="10" value="1">
+                        <button id="btnConfirmAdd" class="btn btn-primary" onclick="onConfirmAddPoints()">确认</button>
+                        <button id="btnCancelAdd" class="btn btn-secondary" onclick="onCancelAddPoints()">取消</button>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <!-- 战斗状态 -->
+            <div class="card battle-status">
+                <div class="card-header">
+                    <h3>⚔️ 战斗状态</h3>
+                    <button class="card-collapse-btn" onclick="onToggleCard(this)">▼</button>
+                </div>
+                <div class="card-content">
+                <div id="battleInfo" class="battle-info">
+                    <div class="cooldown-info">
+                        <span>下次战斗冷却：</span>
+                        <span id="cooldownTimer" class="cooldown-timer">0s</span>
+                    </div>
+                    <div class="battle-stats">
+                        <span>总战斗：<span id="totalBattles">0</span></span>
+                        <span>胜率：<span id="winRate">0%</span></span>
+                    </div>
+                </div>
+                
+                <!-- 敌人信息（战斗中显示） -->
+                <div id="enemyInfo" class="enemy-info hidden">
+                    <h4 id="enemyName">敌人名称</h4>
+                    <div class="enemy-stats">
+                        <span>Lv.<span id="enemyLevel">1</span></span>
+                        <span id="enemyHp">100/100 HP</span>
+                    </div>
+                    <div class="enemy-hp-bar">
+                        <div id="enemyHpBar" class="enemy-hp-fill" style="width: 100%"></div>
+                    </div>
+                </div>
+                
+                <!-- 战斗按钮 -->
+                <div class="battle-actions">
+                    <button id="btnStartBattle" class="btn btn-primary btn-block" onclick="onStartBattle()">🔍 寻找敌人</button>
+                    <button id="btnBattleRound" class="btn btn-danger btn-block hidden" onclick="onBattleRound()">⚔️ 攻击</button>
+                </div>
+                </div>
+            </div>
+
+            <!-- 系统操作 -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>⚙️ 系统</h3>
+                    <button class="card-collapse-btn" onclick="onToggleCard(this)">▼</button>
+                </div>
+                <div class="card-content">
+                <div class="system-actions">
+                    <button id="btnSave" class="btn btn-success" onclick="onSaveGame()">💾 保存进度</button>
+                    <button id="btnOpenShop" class="btn btn-warning" onclick="onOpenShop()">🏪 商店</button>
+                    <button id="btnUsePotion" class="btn btn-primary" onclick="onOpenPotionPanel()">🧪 使用药品</button>
+                    <button id="btnExport" class="btn btn-secondary" onclick="onExportData()">📤 导出数据</button>
+                    <button id="btnImport" class="btn btn-secondary" onclick="document.getElementById('importFile').click()">📥 导入数据</button>
+                    <button id="btnReset" class="btn btn-danger" onclick="onResetGame()">🔄 重置游戏</button>
+                </div>
+                
+                <!-- 自动刷怪 -->
+                <div class="auto-farm-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #3a3a3a;">
+                    <h4 style="margin-bottom: 10px; color: #f0ad4e;">🔄 自动刷怪</h4>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <label style="font-size: 14px;">间隔时间（秒）：</label>
+                        <input type="number" id="autoFarmInterval" value="10" min="5" max="60" style="width: 70px; padding: 5px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
+                        <button id="btnStartAutoFarm" class="btn btn-warning" onclick="onStartAutoFarm()">▶️ 开始刷怪</button>
+                        <button id="btnStopAutoFarm" class="btn btn-danger hidden" onclick="onStopAutoFarm()">⏹️ 停止刷怪</button>
+                    </div>
+                    <div id="autoFarmStatus" style="margin-top: 8px; font-size: 13px; color: #888;"></div>
+                </div>
+                
+                <!-- 离线战斗 -->
+                <div class="offline-farm-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #3a3a3a;">
+                    <h4 style="margin-bottom: 10px; color: #6f42c1;">📴 离线战斗</h4>
+                    <p style="font-size: 13px; color: #aaa; margin-bottom: 10px;">关闭页面后继续战斗，适合挂机</p>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                        <label style="font-size: 14px;">间隔（秒）：</label>
+                        <input type="number" id="offlineFarmInterval" value="10" min="5" max="60" style="width: 70px; padding: 5px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff;">
+                        <button id="btnStartOfflineFarm" class="btn" style="background: #6f42c1; color: white;" onclick="onStartOfflineFarm()">📴 开始离线战斗</button>
+                        <button id="btnStopOfflineFarm" class="btn btn-danger hidden" onclick="onStopOfflineFarm()">⏹️ 停止离线战斗</button>
+                    </div>
+                    <div id="offlineFarmStatus" style="margin-top: 8px; font-size: 13px; color: #888;"></div>
+                </div>
+                
+                <!-- 自动战斗开关 -->
+                <div class="auto-battle-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #3a3a3a;">
+                    <h4 style="margin-bottom: 10px; color: #17a2b8;">⚡ 自动战斗</h4>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 14px; color: #aaa;">开启后每次战斗自动打完</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="autoBattleToggle" onchange="onToggleAutoBattle()">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div id="autoBattleStatus" style="margin-top: 8px; font-size: 13px; color: #888;"></div>
+                </div>
+                
+                <div class="save-status" id="saveStatus"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 隐藏的文件输入（用于导入） -->
+        <input type="file" id="importFile" accept=".json" class="hidden">
+        
+        <!-- 商店面板 -->
+        <div id="shopPanel" class="shop-panel hidden">
+            <div class="shop-header">
+                <h3>🏪 商店</h3>
+                <button class="shop-close-btn" onclick="onCloseShop()">✕</button>
+            </div>
+            <div class="shop-item">
+                <div class="shop-item-info">
+                    <div class="shop-item-name">🧪 小血瓶</div>
+                    <div class="shop-item-desc">恢复 30% 血量</div>
+                </div>
+                <span class="shop-item-price">💰 20</span>
+                <button class="shop-buy-btn" onclick="onBuyPotion('small')">购买</button>
+            </div>
+            <div class="shop-item">
+                <div class="shop-item-info">
+                    <div class="shop-item-name">🧪 中血瓶</div>
+                    <div class="shop-item-desc">恢复 50% 血量</div>
+                </div>
+                <span class="shop-item-price">💰 50</span>
+                <button class="shop-buy-btn" onclick="onBuyPotion('medium')">购买</button>
+            </div>
+            <div class="shop-item">
+                <div class="shop-item-info">
+                    <div class="shop-item-name">🧪 大血瓶</div>
+                    <div class="shop-item-desc">恢复 80% 血量</div>
+                </div>
+                <span class="shop-item-price">💰 100</span>
+                <button class="shop-buy-btn" onclick="onBuyPotion('large')">购买</button>
+            </div>
+            <div class="shop-footer">
+                当前金币：<span class="shop-gold" id="shopGoldDisplay">0</span>
+            </div>
+        </div>
+        
+        <!-- 药品使用面板 -->
+        <div id="potionPanel" class="potion-panel hidden">
+            <div class="potion-header">
+                <h3>🧪 使用药品</h3>
+                <button class="shop-close-btn" onclick="onClosePotionPanel()">✕</button>
+            </div>
+            <div class="potion-item">
+                <div class="potion-item-info">
+                    <span class="potion-item-name">🧪 小血瓶</span>
+                    <span class="potion-count">(恢复 30%)</span>
+                </div>
+                <span>持有: <span id="potionSmallCount">0</span></span>
+                <button class="potion-use-btn" onclick="onUsePotion('small')">使用</button>
+            </div>
+            <div class="potion-item">
+                <div class="potion-item-info">
+                    <span class="potion-item-name">🧪 中血瓶</span>
+                    <span class="potion-count">(恢复 50%)</span>
+                </div>
+                <span>持有: <span id="potionMediumCount">0</span></span>
+                <button class="potion-use-btn" onclick="onUsePotion('medium')">使用</button>
+            </div>
+            <div class="potion-item">
+                <div class="potion-item-info">
+                    <span class="potion-item-name">🧪 大血瓶</span>
+                    <span class="potion-count">(恢复 80%)</span>
+                </div>
+                <span>持有: <span id="potionLargeCount">0</span></span>
+                <button class="potion-use-btn" onclick="onUsePotion('large')">使用</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="api.js"></script>
+    <script src="ui.js"></script>
+</body>
+</html>
